@@ -272,6 +272,8 @@ static cJSON *handle_factory_reset(void)
 static void send_response(const char *json_str)
 {
     if (!s_connected || !s_response_notify_enabled) {
+        ESP_LOGI(TAG, "send_response: skipped (connected=%d, notify=%d)",
+                 s_connected, s_response_notify_enabled);
         return;
     }
 
@@ -279,17 +281,26 @@ static void send_response(const char *json_str)
     size_t chunk_size = (mtu >= 3 + BLE_MIN_CHUNK_SIZE) ? (mtu - 3) : BLE_MIN_CHUNK_SIZE;
 
     const uint8_t *ptr = (const uint8_t *)json_str;
-    size_t remaining = strlen(json_str);
+    size_t total_len = strlen(json_str);
+    size_t remaining = total_len;
+    int chunk_num = 0;
+
+    ESP_LOGI(TAG, "send_response: %d bytes, mtu=%d, chunk_size=%d",
+             (int)total_len, mtu, (int)chunk_size);
 
     while (remaining > 0) {
         size_t send_len = (remaining > chunk_size) ? chunk_size : remaining;
+        chunk_num++;
 
         esp_err_t err = wifi_mgr_ble_backend_notify_response(ptr, send_len);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Notify failed during chunked send, %d bytes remaining",
-                     (int)remaining);
+            ESP_LOGE(TAG, "Notify failed on chunk %d, %d bytes remaining",
+                     chunk_num, (int)remaining);
             return;
         }
+
+        ESP_LOGI(TAG, "Sent chunk %d: %d bytes (%d remaining)",
+                 chunk_num, (int)send_len, (int)(remaining - send_len));
 
         ptr += send_len;
         remaining -= send_len;
