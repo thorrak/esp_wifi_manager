@@ -274,6 +274,8 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
                 }
                 // Handle command write
                 else if (param->write.handle == wifi_handle_table[IDX_CHAR_COMMAND_VAL]) {
+                    ESP_LOGI(TAG, "GATT write received (%d bytes)", param->write.len);
+                    ESP_LOG_BUFFER_HEX_LEVEL(TAG, param->write.value, param->write.len, ESP_LOG_INFO);
                     wifi_mgr_ble_on_command(param->write.value, param->write.len);
                 }
 
@@ -302,8 +304,12 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 esp_err_t wifi_mgr_ble_backend_notify_response(const uint8_t *data, size_t length)
 {
     if (s_profile.gatts_if == ESP_GATT_IF_NONE) {
+        ESP_LOGI(TAG, "TX notify skipped (no GATT interface)");
         return ESP_ERR_INVALID_STATE;
     }
+
+    ESP_LOGI(TAG, "TX notify (%d bytes)", (int)length);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, length, ESP_LOG_INFO);
 
     esp_ble_gatts_send_indicate(s_profile.gatts_if, s_profile.conn_id,
                                  wifi_handle_table[IDX_CHAR_RESPONSE_VAL],

@@ -107,6 +107,9 @@ static int gatt_command_access(uint16_t conn_handle, uint16_t attr_handle,
             return BLE_ATT_ERR_UNLIKELY;
         }
 
+        ESP_LOGI(TAG, "GATT write received (%d bytes)", len);
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, buf, len, ESP_LOG_INFO);
+
         ble_cmd_msg_t msg = { .data = buf, .length = len };
         if (xQueueSend(s_cmd_queue, &msg, 0) != pdTRUE) {
             ESP_LOGW(TAG, "Command queue full, dropping command");
@@ -286,8 +289,12 @@ static void nimble_host_task(void *param)
 esp_err_t wifi_mgr_ble_backend_notify_response(const uint8_t *data, size_t length)
 {
     if (s_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
+        ESP_LOGI(TAG, "TX notify skipped (no connection)");
         return ESP_ERR_INVALID_STATE;
     }
+
+    ESP_LOGI(TAG, "TX notify (%d bytes)", (int)length);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, length, ESP_LOG_INFO);
 
     struct os_mbuf *om = ble_hs_mbuf_from_flat(data, length);
     if (!om) {

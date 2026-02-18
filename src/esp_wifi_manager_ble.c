@@ -340,6 +340,7 @@ static cJSON *handle_factory_reset(void)
 static void send_response(const char *json_str)
 {
     if (!s_connected || !s_response_notify_enabled) {
+        ESP_LOGI(TAG, "TX skipped (connected=%d, notify=%d)", s_connected, s_response_notify_enabled);
         return;
     }
 
@@ -347,10 +348,16 @@ static void send_response(const char *json_str)
     size_t chunk_size = (mtu >= 3 + BLE_MIN_CHUNK_SIZE) ? (mtu - 3) : BLE_MIN_CHUNK_SIZE;
 
     const uint8_t *ptr = (const uint8_t *)json_str;
-    size_t remaining = strlen(json_str);
+    size_t total_len = strlen(json_str);
+    size_t remaining = total_len;
+    int chunk_num = 0;
+
+    ESP_LOGI(TAG, "TX chunked send: %d bytes, mtu=%d, chunk_size=%d", (int)total_len, mtu, (int)chunk_size);
 
     while (remaining > 0) {
         size_t send_len = (remaining > chunk_size) ? chunk_size : remaining;
+
+        ESP_LOGI(TAG, "TX chunk %d: %d bytes", chunk_num, (int)send_len);
 
         esp_err_t err = wifi_mgr_ble_backend_notify_response(ptr, send_len);
         if (err != ESP_OK) {
@@ -361,11 +368,14 @@ static void send_response(const char *json_str)
 
         ptr += send_len;
         remaining -= send_len;
+        chunk_num++;
 
         if (remaining > 0) {
             vTaskDelay(pdMS_TO_TICKS(BLE_CHUNK_DELAY_MS));
         }
     }
+
+    ESP_LOGI(TAG, "TX complete: %d chunks sent", chunk_num);
 }
 
 // =============================================================================
@@ -374,7 +384,7 @@ static void send_response(const char *json_str)
 
 static void handle_command(const char *json_str)
 {
-    ESP_LOGD(TAG, "Command: %s", json_str);
+    ESP_LOGI(TAG, "RX command (%d bytes): %s", (int)strlen(json_str), json_str);
 
     cJSON *json = cJSON_Parse(json_str);
     if (!json) {
@@ -447,6 +457,7 @@ static void handle_command(const char *json_str)
 
     char *response_str = cJSON_PrintUnformatted(response);
     if (response_str) {
+        ESP_LOGI(TAG, "TX response (%d bytes): %s", (int)strlen(response_str), response_str);
         send_response(response_str);
         free(response_str);
     }
@@ -459,6 +470,9 @@ static void handle_command(const char *json_str)
 
 void wifi_mgr_ble_on_command(const uint8_t *data, size_t length)
 {
+    ESP_LOGI(TAG, "RX raw (%d bytes)", (int)length);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, length, ESP_LOG_INFO);
+
     char cmd_buf[512];
     size_t len = length;
     if (len > sizeof(cmd_buf) - 1) {
