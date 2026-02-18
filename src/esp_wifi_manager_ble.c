@@ -470,9 +470,6 @@ static void handle_command(const char *json_str)
 
 void wifi_mgr_ble_on_command(const uint8_t *data, size_t length)
 {
-    ESP_LOGI(TAG, "RX raw (%d bytes)", (int)length);
-    ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, length, ESP_LOG_INFO);
-
     char cmd_buf[512];
     size_t len = length;
     if (len > sizeof(cmd_buf) - 1) {
