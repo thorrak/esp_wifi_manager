@@ -8,6 +8,10 @@
  * is removed but the NimBLE stack keeps running so the application can use
  * BLE for its own purposes.
  *
+ * Two post-provisioning use cases are shown (toggle with EXAMPLE_MODE below):
+ *   MODE_GATT_SERVICE — Register an app GATT service and advertise
+ *   MODE_SCAN_ONLY    — Scan for nearby BLE devices (observer/central role)
+ *
  * Flow:
  *   1. App initializes NimBLE stack
  *   2. wifi_manager_init() detects NimBLE already running, registers GATT
@@ -15,8 +19,14 @@
  *   3. User provisions WiFi via BLE
  *   4. Once connected, wifi_manager_deinit() removes the WiFi Manager GATT
  *      service but leaves NimBLE running
- *   5. App registers its own GATT service and continues using BLE
+ *   5a. (GATT mode) App registers its own GATT service and advertises
+ *   5b. (Scan mode) App starts a BLE scan and logs discovered devices
  */
+
+/** Change this to switch between the two demo modes. */
+#define MODE_GATT_SERVICE  0
+#define MODE_SCAN_ONLY     1
+#define EXAMPLE_MODE       MODE_GATT_SERVICE
 
 #include <stdio.h>
 #include <string.h>
@@ -42,6 +52,8 @@ static const char *TAG = "ble_deinit_example";
 // ============================================================================
 // Application's own GATT service (registered after WiFi provisioning)
 // ============================================================================
+
+#if EXAMPLE_MODE == MODE_GATT_SERVICE
 
 // Custom service UUID: 0xAA00
 static const ble_uuid16_t s_app_svc_uuid = BLE_UUID16_INIT(0xAA00);
@@ -128,6 +140,72 @@ static esp_err_t app_register_gatt_services(void)
     ESP_LOGI(TAG, "App GATT service 0xAA00 registered");
     return ESP_OK;
 }
+
+#endif // MODE_GATT_SERVICE
+
+// ============================================================================
+// BLE scanning (observer/central role — no advertising, no GATT service)
+// ============================================================================
+
+#if EXAMPLE_MODE == MODE_SCAN_ONLY
+
+/** Scan duration in milliseconds (0 = indefinite). */
+#define SCAN_DURATION_MS  10000
+
+static int app_scan_event(struct ble_gap_event *event, void *arg)
+{
+    switch (event->type) {
+        case BLE_GAP_EVENT_DISC: {
+            const struct ble_gap_disc_desc *desc = &event->disc;
+
+            // Extract device name from advertising data if present
+            struct ble_hs_adv_fields fields;
+            int rc = ble_hs_adv_parse_fields(&fields, desc->data,
+                                              desc->length_data);
+
+            char name_buf[32] = "(unknown)";
+            if (rc == 0 && fields.name != NULL && fields.name_len > 0) {
+                size_t copy_len = fields.name_len < sizeof(name_buf) - 1
+                                  ? fields.name_len : sizeof(name_buf) - 1;
+                memcpy(name_buf, fields.name, copy_len);
+                name_buf[copy_len] = '\0';
+            }
+
+            ESP_LOGI(TAG, "Found: %02x:%02x:%02x:%02x:%02x:%02x  RSSI=%d  %s",
+                     desc->addr.val[5], desc->addr.val[4], desc->addr.val[3],
+                     desc->addr.val[2], desc->addr.val[1], desc->addr.val[0],
+                     desc->rssi, name_buf);
+            break;
+        }
+
+        case BLE_GAP_EVENT_DISC_COMPLETE:
+            ESP_LOGI(TAG, "Scan complete (reason=%d)", event->disc_complete.reason);
+            break;
+
+        default:
+            break;
+    }
+    return 0;
+}
+
+static void app_start_scan(void)
+{
+    struct ble_gap_disc_params scan_params = {0};
+    scan_params.passive = 1;        // passive scan — don't send scan requests
+    scan_params.filter_duplicates = 1;
+    scan_params.itvl = 0x50;        // 50ms interval
+    scan_params.window = 0x30;      // 30ms window
+
+    int rc = ble_gap_disc(BLE_OWN_ADDR_PUBLIC, SCAN_DURATION_MS,
+                          &scan_params, app_scan_event, NULL);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "Failed to start scan, rc=%d", rc);
+    } else {
+        ESP_LOGI(TAG, "BLE scan started (%d ms)...", SCAN_DURATION_MS);
+    }
+}
+
+#endif // MODE_SCAN_ONLY
 
 // ============================================================================
 // NimBLE host task and callbacks (owned by the application)
@@ -283,6 +361,7 @@ void app_main(void)
     ESP_LOGI(TAG, "WiFi Manager deinitialized — NimBLE stack still running");
 
     // ── Step 5: App takes over BLE ──
+#if EXAMPLE_MODE == MODE_GATT_SERVICE
     ESP_LOGI(TAG, "Step 5: Registering app GATT service and advertising");
 
     ret = app_register_gatt_services();
@@ -296,9 +375,7 @@ void app_main(void)
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "App is now advertising its own BLE service (0xAA00).");
     ESP_LOGI(TAG, "The WiFi Manager's 0xFFE0 service is gone.");
-    ESP_LOGI(TAG, "WiFi remains connected in the background.");
 
-    // Main loop
     while (1) {
         if (wifi_manager_is_connected()) {
             wifi_status_t status;
@@ -309,7 +386,28 @@ void app_main(void)
         } else {
             ESP_LOGW(TAG, "WiFi not connected | BLE: app service active");
         }
-
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
+
+#elif EXAMPLE_MODE == MODE_SCAN_ONLY
+    ESP_LOGI(TAG, "Step 5: Starting BLE scan (no advertising, no GATT service)");
+    ESP_LOGI(TAG, "");
+
+    while (1) {
+        app_start_scan();
+
+        // Wait for scan to complete, then pause before the next round
+        vTaskDelay(pdMS_TO_TICKS(SCAN_DURATION_MS + 5000));
+
+        if (wifi_manager_is_connected()) {
+            wifi_status_t status;
+            if (wifi_manager_get_status(&status) == ESP_OK) {
+                ESP_LOGI(TAG, "WiFi: %s (%d%%) | Restarting scan...",
+                         status.ssid, status.quality);
+            }
+        } else {
+            ESP_LOGI(TAG, "WiFi not connected | Restarting scan...");
+        }
+    }
+#endif
 }
