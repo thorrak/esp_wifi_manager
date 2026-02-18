@@ -104,6 +104,13 @@ static void app_start_advertising(void)
 
 static esp_err_t app_register_gatt_services(void)
 {
+    // After wifi_manager_deinit(), the GATT table has been committed with only
+    // mandatory GAP/GATT services. To add new services we must reset and
+    // re-register everything (mandatory + app) then commit.
+    ble_gatts_reset();
+    ble_svc_gap_init();
+    ble_svc_gatt_init();
+
     int rc = ble_gatts_count_cfg(s_app_gatt_svcs);
     if (rc != 0) {
         ESP_LOGE(TAG, "ble_gatts_count_cfg failed, rc=%d", rc);
@@ -116,7 +123,6 @@ static esp_err_t app_register_gatt_services(void)
         return ESP_FAIL;
     }
 
-    // Trigger NimBLE to re-read the service table
     ble_gatts_start();
 
     ESP_LOGI(TAG, "App GATT service 0xAA00 registered");

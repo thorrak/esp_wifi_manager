@@ -415,13 +415,15 @@ esp_err_t wifi_mgr_ble_backend_deinit(void)
     ble_gap_adv_stop();
 
     // Reset GATT services so our service is unregistered.
-    // ble_gatts_reset() removes all services; re-register the mandatory ones.
+    // ble_gatts_reset() removes all services; re-register the mandatory ones
+    // and commit with ble_gatts_start() so the server is in a stable state.
     int rc = ble_gatts_reset();
     if (rc != 0) {
         ESP_LOGW(TAG, "ble_gatts_reset failed, rc=%d", rc);
     }
     ble_svc_gap_init();
     ble_svc_gatt_init();
+    ble_gatts_start();
 
     // Full stack teardown only if we own it
     if (s_ble_stack_owned) {
