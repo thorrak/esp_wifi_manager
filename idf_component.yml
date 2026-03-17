@@ -20,5 +20,8 @@ targets:
 dependencies:
   idf:
     version: ">=5.0.0"
-  tuanpmt/esp_bus: "^1.0.3"
+  # Need to link to git directly until https://github.com/tuanpmt/esp_bus/issues/2 gets fixed
+  esp_bus:
+    git: https://github.com/thorrak/esp_bus.git
+#  tuanpmt/esp_bus: "^1.0.3"
   espressif/mdns: "^1.2"
