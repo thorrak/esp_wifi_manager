@@ -472,6 +472,32 @@ typedef struct {
 } wifi_mgr_ble_config_t;
 
 /**
+ * @brief Improv WiFi identify callback
+ *
+ * Called when an Improv client sends the Identify RPC command.
+ * Typically used to flash an LED or beep a buzzer to identify the device.
+ */
+typedef void (*wifi_mgr_improv_identify_cb_t)(void);
+
+/**
+ * @brief Improv WiFi configuration
+ *
+ * Enables the Improv WiFi standard for provisioning via BLE and/or Serial.
+ * Improv BLE coexists with the existing custom BLE GATT service (0xFFE0).
+ * Reference: https://www.improv-wifi.com/
+ */
+typedef struct {
+    bool enable_ble;                          ///< Enable Improv BLE transport
+    bool enable_serial;                       ///< Enable Improv Serial transport
+    int serial_uart_num;                      ///< UART port number (default UART_NUM_0)
+    int serial_baud_rate;                     ///< Baud rate (default 115200)
+    const char *firmware_name;                ///< Reported in Device Info RPC
+    const char *firmware_version;             ///< Reported in Device Info RPC
+    const char *device_name;                  ///< Reported device name
+    wifi_mgr_improv_identify_cb_t on_identify; ///< Optional identify callback
+} wifi_mgr_improv_config_t;
+
+/**
  * @brief Variable validation callback
  *
  * Called before writing a variable to NVS on PUT /api/wifi/vars/:key.
@@ -526,6 +552,7 @@ typedef struct {
     wifi_mgr_http_config_t http;        ///< HTTP REST API config
     wifi_mgr_mdns_config_t mdns;        ///< mDNS config
     wifi_mgr_ble_config_t ble;          ///< BLE GATT config
+    wifi_mgr_improv_config_t improv;    ///< Improv WiFi config
 } wifi_manager_config_t;
 
 // =============================================================================

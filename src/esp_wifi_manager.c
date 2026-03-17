@@ -4,6 +4,9 @@
  */
 
 #include "esp_wifi_manager_priv.h"
+#ifdef CONFIG_WIFI_MGR_ENABLE_IMPROV
+#include "esp_wifi_manager_improv.h"
+#endif
 #include "esp_bus.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -93,6 +96,11 @@ void wifi_mgr_start_provisioning(void)
     }
 #endif
 
+    // Start Improv if enabled
+#ifdef CONFIG_WIFI_MGR_ENABLE_IMPROV
+    wifi_mgr_improv_start();
+#endif
+
     // Register HTTP handlers for provisioning (both are idempotent)
     if (g_wifi_mgr->httpd) {
         wifi_mgr_http_register_api_handlers();
@@ -120,6 +128,11 @@ void wifi_mgr_stop_provisioning(void)
         wifi_mgr_ble_stop();
         g_wifi_mgr->ble_active = false;
     }
+#endif
+
+    // Stop Improv if active
+#ifdef CONFIG_WIFI_MGR_ENABLE_IMPROV
+    wifi_mgr_improv_stop();
 #endif
 
     // Transition HTTP per post-prov mode
@@ -402,6 +415,16 @@ esp_err_t wifi_manager_init(const wifi_manager_config_t *config)
     }
 #endif
 
+    // Init Improv WiFi if enabled
+#ifdef CONFIG_WIFI_MGR_ENABLE_IMPROV
+    if (config && (config->improv.enable_ble || config->improv.enable_serial)) {
+        ret = wifi_mgr_improv_init();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Improv init failed: %s", esp_err_to_name(ret));
+        }
+    }
+#endif
+
     g_wifi_mgr->initialized = true;
     g_wifi_mgr->state = WIFI_STATE_DISCONNECTED;
 
@@ -446,6 +469,11 @@ esp_err_t wifi_manager_deinit(bool deinit_wifi)
     // Stop task
     wifi_mgr_send_event(WM_INT_EVT_STOP);
     vTaskDelay(pdMS_TO_TICKS(100));
+
+#ifdef CONFIG_WIFI_MGR_ENABLE_IMPROV
+    wifi_mgr_improv_stop();
+    wifi_mgr_improv_deinit();
+#endif
 
 #ifdef CONFIG_WIFI_MGR_ENABLE_BLE
     // Stop BLE advertising before full deinit
