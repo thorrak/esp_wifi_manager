@@ -1,5 +1,7 @@
 # ESP WiFi Manager
 
+> **This project has moved.** Active development continues at [esp_wifi_config](https://github.com/thorrak/esp_wifi_config). This repository is no longer maintained — please open issues and pull requests on the new repo.
+
 [![Component Registry](https://components.espressif.com/components/tuanpmt/esp_wifi_manager/badge.svg)](https://components.espressif.com/components/tuanpmt/esp_wifi_manager)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
